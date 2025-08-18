@@ -1,1 +1,642 @@
-<!doctype html><meta charset='utf-8'><title>Prooflane Viewer</title><h1>Prooflane Viewer</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prooflane Viewer (M0)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --fg: #e6edf3;
+      --muted: #9aa7b2;
+      --card: #121820;
+      --accent: #2f81f7;
+      --ok: #2ea043;
+      --warn: #d29922;
+      --err: #f85149;
+      --border: #263241;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+      line-height: 1.45;
+    }
+    header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    main { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 16px; }
+    @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .controls { display: grid; gap: 10px; }
+    .help { color: var(--muted); font-size: 13px; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+    .badge.ok { background: rgba(46,160,67,0.16); color: var(--ok); border: 1px solid rgba(46,160,67,0.48); }
+    .badge.warn { background: rgba(210,153,34,0.16); color: var(--warn); border: 1px solid rgba(210,153,34,0.48); }
+    .badge.err { background: rgba(248,81,73,0.16); color: var(--err); border: 1px solid rgba(248,81,73,0.48); }
+    .kv { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+    .kv span { color: var(--fg); }
+    .list { margin: 12px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+    iframe { width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 8px; background: white; }
+    .filename { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; color: var(--muted); }
+    .grid { display: grid; gap: 8px; }
+    .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .card { background: #0f151d; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .label { color: var(--muted); font-size: 12px; }
+    .value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: #0c131b; border: 1px dashed var(--border); border-radius: 6px; padding: 8px; color: var(--muted); }
+    .small { font-size: 12px; color: var(--muted); }
+    .mb-6 { margin-bottom: 6px; }
+    .mb-8 { margin-bottom: 8px; }
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--fg); margin: 4px 0 6px; }
+    .pill { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--muted); margin-right: 6px; }
+    .pill.ok { color: var(--ok); border-color: rgba(46,160,67,0.5); }
+    .pill.warn { color: var(--warn); border-color: rgba(210,153,34,0.5); }
+    .pill.err { color: var(--err); border-color: rgba(248,81,73,0.5); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+    .tab { border: 1px solid var(--border); background: #0f1720; color: var(--fg); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .tab[disabled] { opacity: 0.5; cursor: not-allowed; }
+    .hidden { display: none; }
+    details summary { cursor: pointer; }
+    button, label[role="button"] {
+      border: 1px solid var(--border); background: #0f1720; color: var(--fg); padding: 8px 10px; border-radius: 6px; cursor: pointer;
+    }
+    button:hover, label[role="button"]:hover { border-color: #33465d; }
+    input[type="file"] { display: none; }
+    .status { display: flex; align-items: center; gap: 8px; }
+    .status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .error { color: var(--err); font-size: 13px; white-space: pre-wrap; }
+    .oktext { color: var(--ok); font-size: 13px; }
+  </style>
+  <meta name="description" content="Prooflane Viewer renders canonical HTML and basic verification status for .pla packages (M0)." />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="icon" href="data:," />
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    // Minimal in-browser PLA viewer (M0):
+    // - Accept a folder selection (webkitdirectory)
+    // - Validate presence of required files from manifest.json
+    // - Render canonical/index.html in iframe (srcdoc)
+    // - Show badge: Verified / Tampered / Unverifiable
+
+    let fileIndex = new Map();
+
+    function resetState() {
+      fileIndex.clear();
+      document.getElementById('manifestName').textContent = '';
+      setBadge('warn', 'Unverifiable');
+      document.getElementById('details').innerHTML = '';
+      document.getElementById('viewer').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="font-family:system-ui,sans-serif;color:#111;padding:1rem">Select a PLA folder to render canonical HTML.</body></html>';
+      document.getElementById('err').textContent = '';
+    }
+
+    function setBadge(kind, text) {
+      const el = document.getElementById('badge');
+      el.className = 'badge ' + kind;
+      el.textContent = text;
+    }
+
+    function readAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(file);
+      });
+    }
+
+    function readAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = () => resolve(reader.result);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    async function ensureSavePla(filesMap, baseName) {
+      // Build .pla (zip) blob
+      const zip = new JSZip();
+      for (const [path, file] of filesMap.entries()) {
+        const buf = await file.arrayBuffer();
+        zip.file(path, buf);
+      }
+      const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+      // Prefer File System Access API when available
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: `${baseName}.pla`,
+            types: [{ description: 'Prooflane Package (.pla)', accept: { 'application/zip': ['.pla'] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return { saved: true, name: handle.name };
+        } catch (e) {
+          // user canceled or failed
+          return { saved: false };
+        }
+      }
+      // Fallback: prompt and trigger download
+      const ok = confirm('Save PLA package now? This will download a .pla file. Click OK to save and render, or Cancel to abort.');
+      if (!ok) return { saved: false };
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${baseName}.pla`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return { saved: true, name: `${baseName}.pla` };
+    }
+
+    async function createPlaFromPdf(file) {
+      try {
+        // Minimal, client-side PLA structure in memory
+        const now = new Date().toISOString();
+        const baseName = (file.name || 'document.pdf').replace(/\.pdf$/i, '');
+        const manifest = {
+          format: 'PROOFLANE',
+          spec_version: '0.1',
+          title: baseName,
+          created: now,
+          doc_id: 'pla:local:' + baseName,
+          latest_commit: 'pla:local:' + baseName + ':0001',
+          commits: ['history/0001.json'],
+          workflow: { state: 'workflow/state.json', log: 'workflow/log.jsonl' }
+        };
+        const commit = {
+          parent: null,
+          timestamp: now,
+          author: { name: 'Local', email: 'local@example.com' },
+          purpose: 'Import PDF',
+          delta: { added: ['manifest.json', 'canonical/index.html'], changed: [], removed: [] },
+          commit_id: 'pla:local:' + baseName + ':0001',
+          signatures: [],
+          anchors: []
+        };
+        const state = { version: '1.0', states: ['imported'], initial_state: 'imported', current_state: 'imported', transitions: [] };
+        const log = [{ ts: now, actor: 'local@example.com', action: 'import' }];
+        const canonicalHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${baseName}</title></head><body><main><h1>${baseName}</h1><p>Source PDF: ${file.name}</p></main></body></html>`;
+
+        // Build in-memory files as a pseudo-folder for the viewer
+        const files = new Map();
+        function add(path, content) {
+          files.set(path, new File([content], path, { type: 'application/json' }));
+        }
+        add('manifest.json', JSON.stringify(manifest, null, 2));
+        add('history/0001.json', JSON.stringify(commit, null, 2));
+        add('workflow/state.json', JSON.stringify(state, null, 2));
+        files.set('workflow/log.jsonl', new File([log.map(l => JSON.stringify(l)).join('\n') + '\n'], 'workflow/log.jsonl', { type: 'text/plain' }));
+        files.set('canonical/index.html', new File([canonicalHtml], 'canonical/index.html', { type: 'text/html' }));
+        // Keep original PDF for preview
+        const pdfBuf = await readAsArrayBuffer(file);
+        files.set('source.pdf', new File([pdfBuf], 'source.pdf', { type: 'application/pdf' }));
+
+        // Require user save before rendering
+        const saveResult = await ensureSavePla(files, baseName);
+        if (!saveResult.saved) {
+          throw new Error('Save canceled');
+        }
+        // Replace the current fileIndex with our generated PLA and render
+        fileIndex = files;
+        document.getElementById('manifestName').textContent = `${saveResult.name}/manifest.json`;
+        setBadge('ok', 'Verified');
+        document.getElementById('err').textContent = '';
+        document.getElementById('viewer').srcdoc = canonicalHtml;
+        const pdfBlob = new Blob([pdfBuf], { type: 'application/pdf' });
+        const source = document.getElementById('sourceContainer');
+        source.innerHTML = '';
+        const iframe = document.createElement('iframe');
+        iframe.title = 'PDF Preview';
+        iframe.src = URL.createObjectURL(pdfBlob);
+        iframe.style.width = '100%';
+        iframe.style.minHeight = '70vh';
+        iframe.style.border = '1px solid var(--border)';
+        iframe.style.borderRadius = '8px';
+        source.appendChild(iframe);
+        document.getElementById('tabSource').disabled = false;
+        document.getElementById('details').innerHTML = '';
+      } catch (e) {
+        setBadge('warn', 'Unverifiable');
+        document.getElementById('err').textContent = 'Failed to create PLA from PDF: ' + e;
+      }
+    }
+
+    async function createPlaFromDocx(file) {
+      const arrayBuffer = await readAsArrayBuffer(file);
+      const result = await window.mammoth.convertToHtml({ arrayBuffer });
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${file.name}</title></head><body>${result.value}</body></html>`;
+      // Reuse PDF flow with different canonical HTML and source rendering
+      await createPlaFromGeneric(file, html, 'docx');
+    }
+
+    async function createPlaFromXlsx(file) {
+      const buf = await readAsArrayBuffer(file);
+      const wb = XLSX.read(buf, { type: 'array' });
+      const wsName = wb.SheetNames[0];
+      const ws = wb.Sheets[wsName];
+      const htmlTable = XLSX.utils.sheet_to_html(ws);
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${file.name}</title></head><body>${htmlTable}</body></html>`;
+      await createPlaFromGeneric(file, html, 'xlsx');
+    }
+
+    async function createPlaFromGeneric(file, canonicalHtml, kind) {
+      const now = new Date().toISOString();
+      const baseName = (file.name || 'document').replace(/\.(pdf|docx|xlsx)$/i, '');
+      const manifest = {
+        format: 'PROOFLANE',
+        spec_version: '0.1',
+        title: baseName,
+        created: now,
+        doc_id: 'pla:local:' + baseName,
+        latest_commit: 'pla:local:' + baseName + ':0001',
+        commits: ['history/0001.json'],
+        workflow: { state: 'workflow/state.json', log: 'workflow/log.jsonl' }
+      };
+      const commit = {
+        parent: null,
+        timestamp: now,
+        author: { name: 'Local', email: 'local@example.com' },
+        purpose: 'Import ' + kind.toUpperCase(),
+        delta: { added: ['manifest.json', 'canonical/index.html'], changed: [], removed: [] },
+        commit_id: 'pla:local:' + baseName + ':0001',
+        signatures: [],
+        anchors: []
+      };
+      const state = { version: '1.0', states: ['imported'], initial_state: 'imported', current_state: 'imported', transitions: [] };
+      const log = [{ ts: now, actor: 'local@example.com', action: 'import' }];
+
+      const files = new Map();
+      function add(path, content) {
+        files.set(path, new File([content], path, { type: 'application/json' }));
+      }
+      add('manifest.json', JSON.stringify(manifest, null, 2));
+      add('history/0001.json', JSON.stringify(commit, null, 2));
+      add('workflow/state.json', JSON.stringify(state, null, 2));
+      files.set('workflow/log.jsonl', new File([log.map(l => JSON.stringify(l)).join('\n') + '\n'], 'workflow/log.jsonl', { type: 'text/plain' }));
+      files.set('canonical/index.html', new File([canonicalHtml], 'canonical/index.html', { type: 'text/html' }));
+
+      const srcBuf = await readAsArrayBuffer(file);
+      files.set('source.' + kind, new File([srcBuf], 'source.' + kind, { type: file.type || 'application/octet-stream' }));
+
+      const saveResult = await ensureSavePla(files, baseName);
+      if (!saveResult.saved) { throw new Error('Save canceled'); }
+      fileIndex = files;
+      document.getElementById('manifestName').textContent = `${saveResult.name}/manifest.json`;
+      setBadge('ok', 'Verified');
+      document.getElementById('err').textContent = '';
+      document.getElementById('viewer').srcdoc = canonicalHtml;
+      const source = document.getElementById('sourceContainer');
+      source.innerHTML = '';
+      if (/pdf$/i.test(kind)) {
+        const iframe = document.createElement('iframe');
+        iframe.title = 'PDF Preview';
+        iframe.src = URL.createObjectURL(new Blob([srcBuf], { type: 'application/pdf' }));
+        iframe.style.width = '100%';
+        iframe.style.minHeight = '70vh';
+        iframe.style.border = '1px solid var(--border)';
+        iframe.style.borderRadius = '8px';
+        source.appendChild(iframe);
+      } else if (/docx$/i.test(kind)) {
+        const div = document.createElement('div');
+        div.innerHTML = canonicalHtml;
+        source.appendChild(div);
+      } else if (/xlsx$/i.test(kind)) {
+        const div = document.createElement('div');
+        div.innerHTML = canonicalHtml;
+        source.appendChild(div);
+      }
+      document.getElementById('tabSource').disabled = false;
+      document.getElementById('details').innerHTML = '';
+    }
+
+    async function onPickFolder(ev) {
+      resetState();
+      const files = Array.from(ev.target.files || []);
+      if (!files.length) return;
+      // Index files by relative path (lowercase, forward slashes)
+      for (const f of files) {
+        const key = (f.webkitRelativePath || f.name).replaceAll('\\\\', '/');
+        fileIndex.set(key, f);
+      }
+      // Try to find manifest.json in root
+      const manifestFile = files.find(f => /(^|\/)manifest\.json$/i.test(f.webkitRelativePath || f.name));
+      if (!manifestFile) {
+        setBadge('warn', 'Unverifiable');
+        document.getElementById('err').textContent = 'manifest.json not found in selected folder.';
+        return;
+      }
+      const manifestRel = manifestFile.webkitRelativePath || manifestFile.name;
+      document.getElementById('manifestName').textContent = manifestRel;
+      let manifest;
+      try {
+        const txt = await readAsText(manifestFile);
+        manifest = JSON.parse(txt);
+      } catch (e) {
+        setBadge('warn', 'Unverifiable');
+        document.getElementById('err').textContent = 'Failed to parse manifest.json: ' + e;
+        return;
+      }
+      // Basic required fields
+      const required = ['format','spec_version','title','created','doc_id','latest_commit','commits','workflow'];
+      const missing = required.filter(k => !(k in manifest));
+      const detail = [];
+      if (missing.length) {
+        setBadge('err', 'Tampered');
+        detail.push('Missing fields: ' + missing.join(', '));
+      }
+      // File presence checks
+      const rootPrefix = manifestRel.includes('/') ? manifestRel.slice(0, manifestRel.lastIndexOf('/') + 1) : '';
+      function getFileByRel(rel) {
+        const norm = rel.replaceAll('\\\\', '/').replace(/^\.\//,'');
+        const candidates = [norm, './' + norm, rootPrefix + norm];
+        for (const c of candidates) {
+          if (fileIndex.has(c)) return fileIndex.get(c);
+        }
+        // Fallback: suffix match
+        for (const [k, f] of fileIndex.entries()) {
+          if (k === norm || k.endsWith('/' + norm)) return f;
+        }
+        return undefined;
+      }
+      function exists(rel) { return !!getFileByRel(rel); }
+      if (manifest && manifest.workflow) {
+        const ws = manifest.workflow.state;
+        const wl = manifest.workflow.log;
+        if (!exists(ws)) detail.push('Missing workflow.state: ' + ws);
+        if (!exists(wl)) detail.push('Missing workflow.log: ' + wl);
+      }
+      // Commit chain checks (lightweight)
+      let chainOk = true;
+      const commits = Array.isArray(manifest.commits) ? manifest.commits : [];
+      const commitJsons = [];
+      for (const c of commits) {
+        if (!exists(c)) {
+          detail.push('Missing commit: ' + c);
+          chainOk = false;
+        }
+      }
+      for (const c of commits) {
+        const f = getFileByRel(c);
+        if (!f) continue;
+        try {
+          const txt = await readAsText(f);
+          const js = JSON.parse(txt);
+          commitJsons.push(js);
+        } catch (e) {
+          detail.push('Failed to read commit ' + c + ': ' + e);
+          chainOk = false;
+        }
+      }
+      for (let i = 0; i < commitJsons.length; i++) {
+        const rec = commitJsons[i] || {};
+        const parent = rec.parent;
+        const commitId = rec.commit_id;
+        // first commit parent must be null
+        if (i === 0 && parent !== null) {
+          detail.push('Commit[0] parent must be null');
+          chainOk = false;
+        }
+        // subsequent commit parent must equal previous commit_id
+        if (i > 0) {
+          const prevId = (commitJsons[i-1] || {}).commit_id;
+          if (parent !== prevId) {
+            detail.push('Commit[' + i + '] parent mismatch: ' + parent + ' != ' + prevId);
+            chainOk = false;
+          }
+        }
+        // minimal type checks
+        if (typeof commitId !== 'string' || !commitId) {
+          detail.push('Commit[' + i + '] missing/invalid commit_id');
+          chainOk = false;
+        }
+      }
+
+      // Sign/Anchor checks when security present
+      let signOk = true;
+      if (manifest && manifest.security) {
+        const last = commitJsons[commitJsons.length - 1] || {};
+        const sigs = Array.isArray(last.signatures) ? last.signatures : [];
+        if (sigs.length === 0) {
+          detail.push('Latest commit must include at least one signature (Sign profile).');
+          signOk = false;
+        }
+        const anchors = Array.isArray(last.anchors) ? last.anchors : [];
+        for (let i = 0; i < anchors.length; i++) {
+          const tok = (anchors[i] && anchors[i].token) || '';
+          if (typeof tok === 'string' && !tok.startsWith('base64:')) {
+            detail.push('Anchor token invalid prefix at anchors[' + (i+1) + ']');
+            signOk = false;
+          }
+        }
+      }
+      // Canonical view
+      const canonicalPath = 'canonical/index.html';
+      if (!exists(canonicalPath)) {
+        detail.push('Missing canonical: ' + canonicalPath);
+      } else {
+        const f = getFileByRel(canonicalPath);
+        try {
+          const html = await readAsText(f);
+          document.getElementById('viewer').srcdoc = html;
+        } catch (e) {
+          detail.push('Failed to read canonical/index.html: ' + e);
+        }
+      }
+      // Populate meta
+      try {
+        document.getElementById('metaTitle').textContent = manifest.title || '';
+        document.getElementById('metaDocId').textContent = manifest.doc_id || '';
+        document.getElementById('metaCreated').textContent = manifest.created || '';
+        document.getElementById('metaLatest').textContent = manifest.latest_commit || '';
+        document.getElementById('metaWorkflow').textContent = manifest.workflow ? 'present' : 'missing';
+        const last = commitJsons[commitJsons.length - 1] || {};
+        const sigs = Array.isArray(last.signatures) ? last.signatures.length : 0;
+        const anchors = Array.isArray(last.anchors) ? last.anchors.length : 0;
+        const securityPresent = manifest.security || sigs > 0 || anchors > 0;
+        document.getElementById('metaSecurity').textContent = securityPresent ? `present (sig ${sigs}, anchors ${anchors})` : 'none';
+      } catch {}
+
+      // Decide status
+      if (!missing.length && chainOk && signOk && !detail.some(d => d.startsWith('Missing') || d.startsWith('Failed'))) {
+        setBadge('ok', 'Verified');
+        document.getElementById('err').textContent = '';
+      } else if (detail.length) {
+        setBadge('err', 'Tampered');
+        document.getElementById('err').textContent = '';
+      }
+      // Render details
+      const ul = document.createElement('ul');
+      ul.className = 'list';
+      for (const d of detail) {
+        const li = document.createElement('li');
+        li.textContent = d;
+        ul.appendChild(li);
+      }
+      document.getElementById('details').innerHTML = '';
+      document.getElementById('details').appendChild(ul);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      resetState();
+      document.getElementById('pick').addEventListener('change', onPickFolder);
+      document.getElementById('copyCmd').addEventListener('click', () => {
+        const pdfName = 'demo.pdf';
+        const cmd = `python scripts/make_demo_pla.py ${pdfName} demo/pla-from-pdf`;
+        navigator.clipboard.writeText(cmd).then(() => {
+          alert('Copied command to clipboard:\n' + cmd);
+        });
+      });
+      document.getElementById('pickDoc').addEventListener('change', async (ev) => {
+        const file = (ev.target.files || [])[0];
+        if (!file) return;
+        const name = (file.name || '').toLowerCase();
+        if (name.endsWith('.pdf') || file.type === 'application/pdf') { await createPlaFromPdf(file); showSource(); return; }
+        if (name.endsWith('.docx')) { await createPlaFromDocx(file); showSource(); return; }
+        if (name.endsWith('.xlsx')) { await createPlaFromXlsx(file); showSource(); return; }
+        alert('Unsupported file type. Please upload PDF, DOCX, or XLSX.');
+      });
+      // Tabs switching
+      const tabCanonical = document.getElementById('tabCanonical');
+      const tabSource = document.getElementById('tabSource');
+      const tabLayers = document.getElementById('tabLayers');
+      const frameCanon = document.getElementById('viewer');
+      const sourceContainer = document.getElementById('sourceContainer');
+      const layersContainer = document.getElementById('layersContainer');
+      function showCanonical() {
+        frameCanon.classList.remove('hidden');
+        sourceContainer.classList.add('hidden');
+        layersContainer.classList.add('hidden');
+      }
+      function showSource() {
+        if (tabSource.disabled) return;
+        frameCanon.classList.add('hidden');
+        sourceContainer.classList.remove('hidden');
+        layersContainer.classList.add('hidden');
+      }
+      function showLayers() {
+        if (tabLayers.disabled) return;
+        frameCanon.classList.add('hidden');
+        sourceContainer.classList.add('hidden');
+        layersContainer.classList.remove('hidden');
+      }
+      tabCanonical.addEventListener('click', showCanonical);
+      tabSource.addEventListener('click', showSource);
+      tabLayers.addEventListener('click', showLayers);
+
+      // Load from .pla zip
+      document.getElementById('pickPlaZip').addEventListener('change', async (ev) => {
+        const file = (ev.target.files || [])[0];
+        if (!file) return;
+        resetState();
+        try {
+          const buf = await readAsArrayBuffer(file);
+          const zip = await JSZip.loadAsync(buf);
+          fileIndex.clear();
+          const entries = Object.keys(zip.files);
+          for (const name of entries) {
+            const entry = zip.files[name];
+            if (entry.dir) continue;
+            const blob = await entry.async('blob');
+            fileIndex.set(name.replaceAll('\\\\','/'), new File([blob], name, { type: blob.type || 'application/octet-stream' }));
+          }
+          // Reuse folder flow by faking a FileList selection of manifest.json
+          const manifestNames = entries.filter(n => /(^|\/)manifest\.json$/i.test(n));
+          if (!manifestNames.length) throw new Error('manifest.json not found in .pla');
+          // Trigger minimal checks
+          const fakeEvent = { target: { files: Array.from(fileIndex.values()) } };
+          await onPickFolder(fakeEvent);
+        } catch (e) {
+          setBadge('warn', 'Unverifiable');
+          document.getElementById('err').textContent = 'Failed to read .pla: ' + e;
+        }
+      });
+    });
+  </script>
+  <!-- Security: This viewer does not fetch remote resources and only renders local canonical HTML via srcdoc. -->
+</head>
+<body>
+  <header>
+    <h1>Prooflane Viewer</h1>
+    <div class="status" role="status" aria-live="polite" tabindex="0">
+      <span id="badge" class="badge warn">Unverifiable</span>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <div class="controls">
+        <div class="section-title">Interact</div>
+        <div class="grid">
+          <div class="card">
+            <div class="small mb-6">Upload a document (PDF, DOCX, XLSX)</div>
+            <div class="small mb-8">We will generate a minimal PLA in your browser and render it.</div>
+            <div class="actions">
+              <label role="button">
+                <input id="pickDoc" type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,.docx,.xlsx" />
+                ➕ Create PLA from document
+              </label>
+            </div>
+          </div>
+          <div class="card">
+            <div class="small mb-6">Select an existing PLA (.pla or folder)</div>
+            <label role="button">
+              <input id="pick" type="file" webkitdirectory directory />
+              📁 Select PLA (.pla or folder)
+            </label>
+            <div class="actions mt-8">
+              <label role="button">
+                <input id="pickPlaZip" type="file" accept="application/zip,.pla" />
+                📦 Select .pla file
+              </label>
+            </div>
+            <div class="kv">Manifest: <span id="manifestName" class="filename"></span></div>
+            <div id="err" class="error" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="section-title mt-12">CLI (optional)</div>
+        <div class="card">
+          <div class="small mb-8">Prefer command line? Use the helper to create a PLA from a PDF, then load it here.</div>
+          <div class="code">python scripts/make_demo_pla.py &lt;your.pdf&gt; demo/pla-from-pdf</div>
+          <div class="actions mt-8">
+            <button id="copyCmd" type="button">Copy command</button>
+            <a href="../../scripts/make_demo_pla.py" target="_blank">
+              <button type="button">Open script</button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="tabs">
+        <button id="tabSource" class="tab" disabled>Original</button>
+        <button id="tabCanonical" class="tab">Canonical HTML</button>
+        <button id="tabLayers" class="tab" disabled>Layers</button>
+      </div>
+      <div id="sourceContainer" class="hidden"></div>
+      <iframe id="viewer" title="Canonical View" sandbox></iframe>
+      <div id="layersContainer" class="hidden"></div>
+      <div class="grid cols-2 mt-12">
+        <div class="card">
+          <div class="label">Details</div>
+          <div id="details"></div>
+        </div>
+        <div class="card">
+          <div class="label">Meta</div>
+          <div id="meta" class="grid">
+            <div><span class="pill">Title</span> <span id="metaTitle" class="value"></span></div>
+            <div><span class="pill">Doc ID</span> <span id="metaDocId" class="value"></span></div>
+            <div><span class="pill">Created</span> <span id="metaCreated" class="value"></span></div>
+            <div><span class="pill">Latest</span> <span id="metaLatest" class="value"></span></div>
+            <div><span class="pill">Workflow</span> <span id="metaWorkflow" class="value"></span></div>
+            <div><span class="pill">Security</span> <span id="metaSecurity" class="value"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
