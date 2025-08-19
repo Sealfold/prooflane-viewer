@@ -36,7 +36,7 @@
     .kv { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
     .kv span { color: var(--fg); }
     .list { margin: 12px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
-    iframe { width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 8px; background: white; }
+    iframe { width: 100%; min-height: 70vh; border: none; border-radius: 0; background: transparent; }
     .filename { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; color: var(--muted); }
     .grid { display: grid; gap: 8px; }
     .grid.cols-2 { grid-template-columns: 1fr 1fr; }
@@ -60,6 +60,14 @@
     .tab[disabled] { opacity: 0.5; cursor: not-allowed; }
     .hidden { display: none; }
     details summary { cursor: pointer; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+    .toc-panel { display: none; background: #0f151d; border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 8px; max-height: 220px; overflow: auto; }
+    .toc-link { display: block; color: var(--accent); text-decoration: none; font-size: 12px; padding: 2px 0; }
+    .toc-indent-1 { margin-left: 0; }
+    .toc-indent-2 { margin-left: 12px; }
+    .toc-indent-3 { margin-left: 24px; }
+    .callout { background: #0f151d; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--muted); }
+    .callout strong { color: var(--fg); }
     button, label[role="button"] {
       border: 1px solid var(--border); background: #0f1720; color: var(--fg); padding: 8px 10px; border-radius: 6px; cursor: pointer;
     }
@@ -67,6 +75,10 @@
     input[type="file"] { display: none; }
     .status { display: flex; align-items: center; gap: 8px; }
     .status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ml-auto { margin-left: auto; }
+    .user-label { margin-left: 8px; opacity: .8; }
+    .hidden-inline { display: none; }
+    .endpoint { border: 1px solid var(--border); background: #0f1720; color: var(--fg); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
     .error { color: var(--err); font-size: 13px; white-space: pre-wrap; }
     .oktext { color: var(--ok); font-size: 13px; }
   </style>
@@ -76,6 +88,12 @@
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>try{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}catch(e){}</script>
+  <script type="module">
+    import { parsePla, renderPdf } from '../../packages/pde-web/dist/pde-web.js';
+    window.PDE = { parsePla, renderPdf };
+  </script>
   <script>
     // Minimal in-browser PLA viewer (M0):
     // - Accept a folder selection (webkitdirectory)
@@ -84,14 +102,65 @@
     // - Show badge: Verified / Tampered / Unverifiable
 
     let fileIndex = new Map();
+    let currentProfiles = [];
+    let currentDefaultProfile = null;
 
     function resetState() {
       fileIndex.clear();
+      currentProfiles = [];
+      currentDefaultProfile = null;
       document.getElementById('manifestName').textContent = '';
       setBadge('warn', 'Unverifiable');
       document.getElementById('details').innerHTML = '';
-      document.getElementById('viewer').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="font-family:system-ui,sans-serif;color:#111;padding:1rem">Select a PLA folder to render canonical HTML.</body></html>';
+      document.getElementById('viewer').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="font-family:system-ui,sans-serif;color:#111;padding:1rem">Select a PLA file or Upload a file to render canonical HTML.</body></html>';
       document.getElementById('err').textContent = '';
+    }
+
+    async function detectProfiles() {
+      const names = new Set();
+      for (const key of fileIndex.keys()) {
+        const m = key.match(/^search\/profiles\/([^/]+)\/metadata\.json$/i);
+        if (m) names.add(m[1]);
+      }
+      currentProfiles = Array.from(names).sort();
+      currentDefaultProfile = currentProfiles[0] || null;
+      // Attempt to read default flag from metadata
+      for (const name of currentProfiles) {
+        const metaFile = fileIndex.get(`search/profiles/${name}/metadata.json`);
+        if (!metaFile) continue;
+        try {
+          const js = JSON.parse(await readAsText(metaFile));
+          if (js && (js.default === true || js.is_default === true)) { currentDefaultProfile = name; break; }
+        } catch {}
+      }
+    }
+
+    function updateRagUi() {
+      const ragBtn = document.getElementById('btnRagPack');
+      const help = document.getElementById('ragHelp');
+      const sel = document.getElementById('profileSelect');
+      const hasEmbedded = currentProfiles.length > 0;
+      if (hasEmbedded) {
+        ragBtn.textContent = currentDefaultProfile ? `Export RAG Pack (${currentDefaultProfile})` : 'Export RAG Pack';
+        ragBtn.disabled = false;
+        if (help) help.innerHTML = '<strong>RAG Pack</strong> — Export the embedded vector profile for direct indexing (no re-embedding).';
+        if (currentProfiles.length > 1 && sel) {
+          sel.innerHTML = '';
+          for (const name of currentProfiles) {
+            const opt = document.createElement('option');
+            opt.value = name; opt.textContent = name + (name === currentDefaultProfile ? ' (default)' : '');
+            if (name === currentDefaultProfile) opt.selected = true;
+            sel.appendChild(opt);
+          }
+          sel.classList.remove('hidden-inline');
+        } else if (sel) {
+          sel.classList.add('hidden-inline');
+        }
+      } else {
+        ragBtn.textContent = 'Download RAG Pack';
+        ragBtn.disabled = false;
+        if (sel) sel.classList.add('hidden-inline');
+      }
     }
 
     function setBadge(kind, text) {
@@ -126,25 +195,7 @@
         zip.file(path, buf);
       }
       const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
-      // Prefer File System Access API when available
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: `${baseName}.pla`,
-            types: [{ description: 'Prooflane Package (.pla)', accept: { 'application/zip': ['.pla'] } }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          return { saved: true, name: handle.name };
-        } catch (e) {
-          // user canceled or failed
-          return { saved: false };
-        }
-      }
-      // Fallback: prompt and trigger download
-      const ok = confirm('Save PLA package now? This will download a .pla file. Click OK to save and render, or Cancel to abort.');
-      if (!ok) return { saved: false };
+      // Auto-download to browser's default download location
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `${baseName}.pla`;
@@ -180,7 +231,7 @@
         };
         const state = { version: '1.0', states: ['imported'], initial_state: 'imported', current_state: 'imported', transitions: [] };
         const log = [{ ts: now, actor: 'local@example.com', action: 'import' }];
-        const canonicalHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${baseName}</title></head><body><main><h1>${baseName}</h1><p>Source PDF: ${file.name}</p></main></body></html>`;
+        const canonicalHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${baseName}</title><style>html,body{margin:0;padding:0;background:transparent} .page{box-shadow:none;margin:0 auto;background:transparent;display:block}</style></head><body><main><div id="pdfPages"></div></main></body></html>`;
 
         // Build in-memory files as a pseudo-folder for the viewer
         const files = new Map();
@@ -206,8 +257,64 @@
         document.getElementById('manifestName').textContent = `${saveResult.name}/manifest.json`;
         setBadge('ok', 'Verified');
         document.getElementById('err').textContent = '';
-        document.getElementById('viewer').srcdoc = canonicalHtml;
+        const frame = document.getElementById('viewer');
+        frame.onload = null;
+        frame.srcdoc = canonicalHtml;
+        frame.onload = () => {
+          try {
+            const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+            const win = frame.contentWindow;
+            if (!win) return;
+            const doc = win.document;
+            const container = doc && doc.getElementById('pdfPages');
+            if (!container || !window.PDE) return;
+            // Use PDE web adapter
+            window.PDE.renderPdf(container, pdfBlob, { scale: 1.2, skipFirstPage: false });
+          } catch {}
+        };
+        // Populate meta immediately for created PLA
+        const metaTitle = document.getElementById('metaTitle');
+        const metaDocId = document.getElementById('metaDocId');
+        const metaCreated = document.getElementById('metaCreated');
+        const metaLatest = document.getElementById('metaLatest');
+        const metaWorkflow = document.getElementById('metaWorkflow');
+        const metaSecurity = document.getElementById('metaSecurity');
+        const metaVector = document.getElementById('metaVector');
+        const metaSuite = document.getElementById('metaSuite');
+        if (metaTitle) metaTitle.textContent = manifest.title;
+        if (metaDocId) metaDocId.textContent = manifest.doc_id;
+        if (metaCreated) metaCreated.textContent = manifest.created;
+        if (metaLatest) metaLatest.textContent = manifest.latest_commit;
+        if (metaWorkflow) metaWorkflow.textContent = 'present';
+        if (metaSecurity) metaSecurity.textContent = 'none';
+        if (metaVector) metaVector.textContent = 'none';
+        if (metaSuite) metaSuite.textContent = 'Word (Processing)';
         const pdfBlob = new Blob([pdfBuf], { type: 'application/pdf' });
+        // Render PDF into the canonical view (inside iframe) for near-original fidelity
+        try {
+          const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+          setTimeout(async () => {
+            const frame = document.getElementById('viewer');
+            if (!frame) return;
+            const frameDoc = frame.contentDocument || frame.contentWindow?.document;
+            if (!frameDoc) return;
+            const container = frameDoc.getElementById('pdfPages');
+            if (!container || !window.pdfjsLib) return;
+            const loadingTask = window.pdfjsLib.getDocument({ url: pdfBlobUrl });
+            const pdf = await loadingTask.promise;
+            const startPage = pdf.numPages > 1 ? 2 : 1;
+            for (let i = startPage; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const viewport = page.getViewport({ scale: 1.2 });
+              const canvas = frameDoc.createElement('canvas');
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              canvas.className = 'page';
+              container.appendChild(canvas);
+              await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            }
+          }, 50);
+        } catch {}
         const source = document.getElementById('sourceContainer');
         source.innerHTML = '';
         const iframe = document.createElement('iframe');
@@ -229,7 +336,7 @@
     async function createPlaFromDocx(file) {
       const arrayBuffer = await readAsArrayBuffer(file);
       const result = await window.mammoth.convertToHtml({ arrayBuffer });
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${file.name}</title></head><body>${result.value}</body></html>`;
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${file.name}</title></head><body>${result.value}</body></html>`;
       // Reuse PDF flow with different canonical HTML and source rendering
       await createPlaFromGeneric(file, html, 'docx');
     }
@@ -240,7 +347,7 @@
       const wsName = wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const htmlTable = XLSX.utils.sheet_to_html(ws);
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${file.name}</title></head><body>${htmlTable}</body></html>`;
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${file.name}</title></head><body>${htmlTable}</body></html>`;
       await createPlaFromGeneric(file, html, 'xlsx');
     }
 
@@ -289,7 +396,26 @@
       document.getElementById('manifestName').textContent = `${saveResult.name}/manifest.json`;
       setBadge('ok', 'Verified');
       document.getElementById('err').textContent = '';
-      document.getElementById('viewer').srcdoc = canonicalHtml;
+      const frame2 = document.getElementById('viewer');
+      frame2.onload = null;
+      frame2.srcdoc = canonicalHtml;
+      // Populate meta immediately for created PLA
+      const metaTitle2 = document.getElementById('metaTitle');
+      const metaDocId2 = document.getElementById('metaDocId');
+      const metaCreated2 = document.getElementById('metaCreated');
+      const metaLatest2 = document.getElementById('metaLatest');
+      const metaWorkflow2 = document.getElementById('metaWorkflow');
+      const metaSecurity2 = document.getElementById('metaSecurity');
+      const metaVector2 = document.getElementById('metaVector');
+      const metaSuite2 = document.getElementById('metaSuite');
+      if (metaTitle2) metaTitle2.textContent = manifest.title;
+      if (metaDocId2) metaDocId2.textContent = manifest.doc_id;
+      if (metaCreated2) metaCreated2.textContent = manifest.created;
+      if (metaLatest2) metaLatest2.textContent = manifest.latest_commit;
+      if (metaWorkflow2) metaWorkflow2.textContent = 'present';
+      if (metaSecurity2) metaSecurity2.textContent = 'none';
+      if (metaVector2) metaVector2.textContent = 'none';
+      if (metaSuite2) metaSuite2.textContent = kind === 'docx' ? 'Word (Processing)' : (kind === 'xlsx' ? 'Spreadsheet' : 'Word (Processing)');
       const source = document.getElementById('sourceContainer');
       source.innerHTML = '';
       if (/pdf$/i.test(kind)) {
@@ -447,19 +573,50 @@
           detail.push('Failed to read canonical/index.html: ' + e);
         }
       }
-      // Populate meta
-      try {
-        document.getElementById('metaTitle').textContent = manifest.title || '';
-        document.getElementById('metaDocId').textContent = manifest.doc_id || '';
-        document.getElementById('metaCreated').textContent = manifest.created || '';
-        document.getElementById('metaLatest').textContent = manifest.latest_commit || '';
-        document.getElementById('metaWorkflow').textContent = manifest.workflow ? 'present' : 'missing';
+      // Populate meta (ensure elements exist)
+      const metaTitle = document.getElementById('metaTitle');
+      const metaDocId = document.getElementById('metaDocId');
+      const metaCreated = document.getElementById('metaCreated');
+      const metaLatest = document.getElementById('metaLatest');
+      const metaWorkflow = document.getElementById('metaWorkflow');
+      const metaSecurity = document.getElementById('metaSecurity');
+      const metaVector = document.getElementById('metaVector');
+      if (metaTitle && metaDocId && metaCreated && metaLatest && metaWorkflow && metaSecurity) {
+        metaTitle.textContent = manifest.title || '';
+        metaDocId.textContent = manifest.doc_id || '';
+        metaCreated.textContent = manifest.created || '';
+        metaLatest.textContent = manifest.latest_commit || '';
+        metaWorkflow.textContent = manifest.workflow ? 'present' : 'missing';
         const last = commitJsons[commitJsons.length - 1] || {};
         const sigs = Array.isArray(last.signatures) ? last.signatures.length : 0;
         const anchors = Array.isArray(last.anchors) ? last.anchors.length : 0;
         const securityPresent = manifest.security || sigs > 0 || anchors > 0;
-        document.getElementById('metaSecurity').textContent = securityPresent ? `present (sig ${sigs}, anchors ${anchors})` : 'none';
-      } catch {}
+        metaSecurity.textContent = securityPresent ? `present (sig ${sigs}, anchors ${anchors})` : 'none';
+        if (metaVector) {
+          // vector readiness: embeddings metadata and chunks consistency
+          let vectorText = 'none';
+          try {
+            const metaFile = getFileByRel('search/metadata.json');
+            const chunksFile = getFileByRel('search/chunks.jsonl');
+            const embedFile = getFileByRel('search/embeddings.bin');
+            if (metaFile && chunksFile && embedFile) {
+              const metaJson = JSON.parse(await readAsText(metaFile));
+              const dim = Number(metaJson.dim || 0);
+              const chunksTxt = await readAsText(chunksFile);
+              const lines = chunksTxt.split(/\r?\n/).filter(Boolean);
+              const count = lines.length;
+              const size = (await embedFile.arrayBuffer()).byteLength;
+              const expected = count * dim * 4;
+              if (dim > 0 && count > 0) {
+                vectorText = size === expected ? `ready (dim ${dim}, chunks ${count})` : `mismatch (dim ${dim}, chunks ${count})`;
+              } else {
+                vectorText = 'present (metadata incomplete)';
+              }
+            }
+          } catch {}
+          metaVector.textContent = vectorText;
+        }
+      }
 
       // Decide status
       if (!missing.length && chainOk && signOk && !detail.some(d => d.startsWith('Missing') || d.startsWith('Failed'))) {
@@ -477,19 +634,43 @@
         li.textContent = d;
         ul.appendChild(li);
       }
-      document.getElementById('details').innerHTML = '';
-      document.getElementById('details').appendChild(ul);
+      const detailsBox = document.getElementById('details');
+      if (detailsBox) {
+        detailsBox.innerHTML = '';
+        if (detail.length === 0) {
+          const ok = document.createElement('div');
+          ok.className = 'oktext';
+          ok.textContent = 'No issues detected.';
+          detailsBox.appendChild(ok);
+        } else {
+          detailsBox.appendChild(ul);
+        }
+      }
+      // profiles
+      detectProfiles();
+      updateRagUi();
     }
 
     window.addEventListener('DOMContentLoaded', () => {
       resetState();
-      document.getElementById('pick').addEventListener('change', onPickFolder);
-      document.getElementById('copyCmd').addEventListener('click', () => {
-        const pdfName = 'demo.pdf';
-        const cmd = `python scripts/make_demo_pla.py ${pdfName} demo/pla-from-pdf`;
-        navigator.clipboard.writeText(cmd).then(() => {
-          alert('Copied command to clipboard:\n' + cmd);
-        });
+      // Default demo user label and simple mock auth toggle
+      const userEl = document.getElementById('userLabel');
+      if (userEl) userEl.textContent = 'User: Demo-Anonymous';
+      const authBtn = document.getElementById('btnAuth');
+      const endpointInput = document.getElementById('vecEndpoint');
+      const autoUploadCk = document.getElementById('autoUpload');
+      window.SEALFOLD_VECTOR_ENDPOINT = '';
+      endpointInput.addEventListener('change', () => { window.SEALFOLD_VECTOR_ENDPOINT = endpointInput.value.trim(); });
+      let signedIn = false;
+      authBtn.addEventListener('click', () => {
+        signedIn = !signedIn;
+        if (signedIn) {
+          userEl.textContent = 'User: demo.user@contoso.com (Contoso Ltd)';
+          authBtn.textContent = 'Sign out';
+        } else {
+          userEl.textContent = 'User: Demo-Anonymous';
+          authBtn.textContent = 'Sign in';
+        }
       });
       document.getElementById('pickDoc').addEventListener('change', async (ev) => {
         const file = (ev.target.files || [])[0];
@@ -503,30 +684,23 @@
       // Tabs switching
       const tabCanonical = document.getElementById('tabCanonical');
       const tabSource = document.getElementById('tabSource');
-      const tabLayers = document.getElementById('tabLayers');
       const frameCanon = document.getElementById('viewer');
       const sourceContainer = document.getElementById('sourceContainer');
-      const layersContainer = document.getElementById('layersContainer');
       function showCanonical() {
         frameCanon.classList.remove('hidden');
         sourceContainer.classList.add('hidden');
-        layersContainer.classList.add('hidden');
+        document.getElementById('docToolbar').classList.remove('hidden-inline');
+        setRagHelpVisible(true);
       }
       function showSource() {
         if (tabSource.disabled) return;
         frameCanon.classList.add('hidden');
         sourceContainer.classList.remove('hidden');
-        layersContainer.classList.add('hidden');
-      }
-      function showLayers() {
-        if (tabLayers.disabled) return;
-        frameCanon.classList.add('hidden');
-        sourceContainer.classList.add('hidden');
-        layersContainer.classList.remove('hidden');
+        document.getElementById('docToolbar').classList.add('hidden-inline');
+        setRagHelpVisible(false);
       }
       tabCanonical.addEventListener('click', showCanonical);
       tabSource.addEventListener('click', showSource);
-      tabLayers.addEventListener('click', showLayers);
 
       // Load from .pla zip
       document.getElementById('pickPlaZip').addEventListener('change', async (ev) => {
@@ -555,6 +729,81 @@
           document.getElementById('err').textContent = 'Failed to read .pla: ' + e;
         }
       });
+
+      // Toolbar actions
+      document.getElementById('btnPrint').addEventListener('click', () => {
+        const frame = document.getElementById('viewer');
+        if (frame && frame.contentWindow) {
+          // Ensure we only print the iframe content
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+        }
+      });
+      document.getElementById('btnRagPack').addEventListener('click', async () => {
+        try {
+          if (!window.JSZip && !window.JSZIP && !window.JSZipUtils) {
+            // JSZip already loaded globally as JSZip
+          }
+          const files = Array.from(fileIndex.entries());
+          const sel = document.getElementById('profileSelect');
+          const selected = (sel && !sel.classList.contains('hidden-inline') && sel.value) ? sel.value : (currentDefaultProfile || currentProfiles[0]);
+          const profilePrefix = currentProfiles.length ? `search/profiles/${selected}/` : 'search/';
+          const matching = files.filter(([name]) => name.startsWith(profilePrefix));
+          if (matching.length === 0) {
+            alert('No vector profile found yet. This demo will enable RAG Pack download once profiles are added.');
+            return;
+          }
+          const zip = new JSZip();
+          for (const [name, file] of matching) {
+            const buf = await file.arrayBuffer();
+            zip.file(name.replace(/^search\//,''), buf);
+          }
+          const blob = await zip.generateAsync({ type: 'blob' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'rag-pack.zip';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 3000);
+          // Optional auto indexing to connected vector DB if configured
+          if (autoUploadCk && autoUploadCk.checked && window.SEALFOLD_VECTOR_ENDPOINT) {
+            try {
+              await fetch(window.SEALFOLD_VECTOR_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: blob });
+            } catch {}
+          }
+        } catch (e) {
+          alert('Failed to create RAG Pack: ' + e);
+        }
+      });
+      document.getElementById('btnToc').addEventListener('click', () => {
+        const frame = document.getElementById('viewer');
+        const panel = document.getElementById('tocPanel');
+        if (!frame || !frame.contentDocument) return;
+        const doc = frame.contentDocument;
+        const headings = Array.from(doc.querySelectorAll('h1,h2,h3'));
+        if (!headings.length) { panel.style.display = 'none'; return; }
+        panel.innerHTML = '';
+        headings.forEach((h, idx) => {
+          const level = h.tagName === 'H1' ? 1 : h.tagName === 'H2' ? 2 : 3;
+          const id = h.id || `toc-${idx}`;
+          h.id = id;
+          const a = document.createElement('a');
+          a.href = `#${id}`;
+          a.textContent = h.textContent || `Section ${idx+1}`;
+          a.className = `toc-link toc-indent-${level}`;
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            frame.contentWindow.location.hash = id;
+          });
+          panel.appendChild(a);
+        });
+        panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+      });
+      // Show RAG help when toolbar is visible (Prooflane Document)
+      function setRagHelpVisible(isVisible) {
+        const help = document.getElementById('ragHelp');
+        if (!help) return;
+        if (isVisible) help.classList.remove('hidden-inline'); else help.classList.add('hidden-inline');
+      }
     });
   </script>
   <!-- Security: This viewer does not fetch remote resources and only renders local canonical HTML via srcdoc. -->
@@ -562,9 +811,13 @@
 <body>
   <header>
     <h1>Prooflane Viewer</h1>
-    <div class="status" role="status" aria-live="polite" tabindex="0">
+    <div class="status ml-auto" role="status" aria-live="polite" tabindex="0">
       <span id="badge" class="badge warn">Unverifiable</span>
     </div>
+    <div class="small user-label" id="userLabel">User: Demo-Anonymous</div>
+    <button id="btnAuth" type="button" class="user-label">Sign in</button>
+    <input id="vecEndpoint" class="endpoint user-label" placeholder="Vector endpoint (optional)" />
+    <label class="small user-label"><input type="checkbox" id="autoUpload" /> auto-upload RAG Pack</label>
   </header>
   <main>
     <section class="panel">
@@ -574,6 +827,7 @@
           <div class="card">
             <div class="small mb-6">Upload a document (PDF, DOCX, XLSX)</div>
             <div class="small mb-8">We will generate a minimal PLA in your browser and render it.</div>
+            <div class="small mb-8">A .pla file will auto-download to your default downloads folder before rendering.</div>
             <div class="actions">
               <label role="button">
                 <input id="pickDoc" type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,.docx,.xlsx" />
@@ -582,12 +836,9 @@
             </div>
           </div>
           <div class="card">
-            <div class="small mb-6">Select an existing PLA (.pla or folder)</div>
-            <label role="button">
-              <input id="pick" type="file" webkitdirectory directory />
-              📁 Select PLA (.pla or folder)
-            </label>
-            <div class="actions mt-8">
+            <div class="small mb-6">Select an existing PLA (.pla)</div>
+            <div class="small mb-8">Loads the package, renders its canonical HTML, and shows provenance/governance metadata.</div>
+            <div class="actions">
               <label role="button">
                 <input id="pickPlaZip" type="file" accept="application/zip,.pla" />
                 📦 Select .pla file
@@ -596,36 +847,20 @@
             <div class="kv">Manifest: <span id="manifestName" class="filename"></span></div>
             <div id="err" class="error" aria-live="polite"></div>
           </div>
-        </div>
-        <div class="section-title mt-12">CLI (optional)</div>
-        <div class="card">
-          <div class="small mb-8">Prefer command line? Use the helper to create a PLA from a PDF, then load it here.</div>
-          <div class="code">python scripts/make_demo_pla.py &lt;your.pdf&gt; demo/pla-from-pdf</div>
-          <div class="actions mt-8">
-            <button id="copyCmd" type="button">Copy command</button>
-            <a href="../../scripts/make_demo_pla.py" target="_blank">
-              <button type="button">Open script</button>
-            </a>
+          <div class="callout">
+            <strong>Access & Sharing</strong><br/>
+            Viewing this document requires authentication. Sharing requires a configured enterprise workflow. Organizations (same or external) federate via Microsoft Entra ID or other common identity providers.
           </div>
         </div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="tabs">
-        <button id="tabSource" class="tab" disabled>Original</button>
-        <button id="tabCanonical" class="tab">Canonical HTML</button>
-        <button id="tabLayers" class="tab" disabled>Layers</button>
-      </div>
-      <div id="sourceContainer" class="hidden"></div>
-      <iframe id="viewer" title="Canonical View" sandbox></iframe>
-      <div id="layersContainer" class="hidden"></div>
-      <div class="grid cols-2 mt-12">
+        <!-- CLI section hidden for now -->
+        <div class="section-title mt-12">Details</div>
         <div class="card">
           <div class="label">Details</div>
           <div id="details"></div>
         </div>
         <div class="card">
           <div class="label">Meta</div>
+          <div class="small mb-8">Prooflane embeds document governance, provenance, and vector metadata to enable strong semantic reasoning and verification.</div>
           <div id="meta" class="grid">
             <div><span class="pill">Title</span> <span id="metaTitle" class="value"></span></div>
             <div><span class="pill">Doc ID</span> <span id="metaDocId" class="value"></span></div>
@@ -633,9 +868,32 @@
             <div><span class="pill">Latest</span> <span id="metaLatest" class="value"></span></div>
             <div><span class="pill">Workflow</span> <span id="metaWorkflow" class="value"></span></div>
             <div><span class="pill">Security</span> <span id="metaSecurity" class="value"></span></div>
+            <div><span class="pill">Vector</span> <span id="metaVector" class="value"></span></div>
+            <div><span class="pill">Suite</span> <span id="metaSuite" class="value">Word (Processing)</span></div>
           </div>
         </div>
       </div>
+    </section>
+    <section class="panel">
+      <div class="tabs">
+        <button id="tabSource" class="tab" disabled>Original</button>
+        <button id="tabCanonical" class="tab" title="Canonical Prooflane document view (normalized HTML per spec)">Prooflane Document</button>
+      </div>
+      <div id="docToolbar" class="toolbar hidden-inline">
+        <button id="btnPrint" type="button">Print</button>
+        <button id="btnToc" type="button">Table of Contents</button>
+        <select id="profileSelect" class="hidden-inline"></select>
+        <button id="btnRagPack" type="button" title="Download vector profile contents as a zip (stub)">Download RAG Pack</button>
+      </div>
+      <div id="ragHelp" class="callout hidden-inline">
+        <strong>RAG Pack</strong> — A ready-to-index vector profile extracted from this Prooflane document.
+        It includes chunks, embeddings, metadata, and a map so vector databases can ingest without re-embedding.
+        Use it when you want search/Q&A over this file or need to share vectors across environments without exposing your embedding keys.
+        By default, Prooflane is self-contained and can embed profiles inside the `.pla`. Some organizations prefer storing large profiles on company servers for governance and cost. This demo downloads a RAG Pack on demand; you can disable download and keep profiles server-side in production.
+      </div>
+      <div id="tocPanel" class="toc-panel"></div>
+      <div id="sourceContainer" class="hidden"></div>
+      <iframe id="viewer" title="Prooflane Document" sandbox="allow-scripts allow-same-origin"></iframe>
     </section>
   </main>
 </body>

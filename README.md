@@ -7,18 +7,21 @@ The Prooflane Viewer repository serves as the **frontend viewer application** fo
 ## 🏗️ **Core Responsibilities**
 
 ### **Frontend Application**
+
 - **User Interface**: Modern, responsive web interface for verification data
 - **Data Visualization**: Interactive charts, graphs, and data displays
 - **User Experience**: Intuitive navigation and workflow management
 - **Accessibility**: Inclusive design for all users
 
 ### **Verification Display**
+
 - **Verification Results**: Clear presentation of verification outcomes
 - **Workflow Status**: Real-time status updates and progress tracking
 - **Data Exploration**: Interactive exploration of verification data
 - **Export Capabilities**: Data export in multiple formats
 
 ### **Integration Layer**
+
 - **API Integration**: Seamless integration with backend services
 - **SDK Integration**: Client library integration for data access
 - **Real-time Updates**: WebSocket integration for live data updates
@@ -27,6 +30,7 @@ The Prooflane Viewer repository serves as the **frontend viewer application** fo
 ## 🔧 **Technical Architecture**
 
 ### **Frontend Stack**
+
 ```typescript
 // Technology stack
 const techStack = {
@@ -41,6 +45,7 @@ const techStack = {
 ```
 
 ### **Core Components**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   PROOFLANE VIEWER                     │
@@ -56,24 +61,29 @@ const techStack = {
 ## 🔗 **Dependencies & Relationships**
 
 ### **Dependencies**
+
 - **prooflane-spec**: Must use specification-defined data models
 - **sealfold-server**: Consumes backend APIs for data access
 - **prooflane-sdks**: Uses client libraries for API integration
 
 ### **Dependents**
+
 - **sealfold-infra**: Deployed through infrastructure management
 - **sealfold-studio-lite**: Integrated with development tools
 
 ## 🧠 **AI Agent Integration**
 
 ### **Viewer Agent**
+
 The repository includes a specialized AI agent (`viewer-agent.md`) that:
+
 - **UI Optimization**: Ensures optimal user experience and interface design
 - **Frontend Integration**: Manages integration with backend and SDKs
 - **Performance Monitoring**: Monitors frontend performance and optimization
 - **User Experience**: Focuses on user experience and accessibility
 
 ### **Agent Capabilities**
+
 - **Interface Validation**: Validates UI components and user experience
 - **Integration Testing**: Tests integration with backend services
 - **Performance Optimization**: Optimizes frontend performance
@@ -106,12 +116,14 @@ prooflane-viewer/
 ## 🚀 **Getting Started**
 
 ### **Prerequisites**
+
 - Node.js 18+ and npm
 - Modern web browser
 - Backend services running
 - Environment configuration
 
 ### **Quick Start**
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -135,6 +147,7 @@ npm run build
 ```
 
 ### **Environment Configuration**
+
 ```bash
 # Required environment variables
 VITE_API_BASE_URL=http://localhost:3001/api/v1
@@ -150,6 +163,7 @@ VITE_FEATURE_FLAGS=advanced-charts,export-features
 ## 🎨 **User Interface Components**
 
 ### **Core Components**
+
 ```typescript
 // Main navigation component
 interface NavigationProps {
@@ -174,6 +188,7 @@ interface ChartComponentProps {
 ```
 
 ### **Component Library**
+
 ```typescript
 // Reusable component examples
 const Button = ({ variant, size, children, ...props }) => (
@@ -199,6 +214,7 @@ const Card = ({ title, children, actions }) => (
 ## 📊 **Data Visualization**
 
 ### **Chart Types**
+
 ```typescript
 // Supported chart types
 enum ChartType {
@@ -221,6 +237,7 @@ interface ChartConfig {
 ```
 
 ### **Interactive Features**
+
 ```typescript
 // Chart interaction handlers
 const handleChartClick = (data: ChartClickData) => {
@@ -238,6 +255,7 @@ const handleChartZoom = (domain: Domain) => {
 ## 🔄 **Real-time Updates**
 
 ### **WebSocket Integration**
+
 ```typescript
 // WebSocket connection management
 class WebSocketManager {
@@ -266,6 +284,7 @@ class WebSocketManager {
 ```
 
 ### **State Management**
+
 ```typescript
 // Zustand store for real-time updates
 interface ViewerStore {
@@ -296,6 +315,7 @@ const useViewerStore = create<ViewerStore>((set) => ({
 ## 📱 **Responsive Design**
 
 ### **Breakpoint System**
+
 ```typescript
 // Responsive breakpoints
 const breakpoints = {
@@ -330,6 +350,7 @@ const useResponsive = () => {
 ```
 
 ### **Mobile-First Design**
+
 ```typescript
 // Mobile-optimized components
 const MobileVerificationCard = ({ verification }) => (
@@ -353,6 +374,7 @@ const MobileVerificationCard = ({ verification }) => (
 ## 🧪 **Testing Strategy**
 
 ### **Test Types**
+
 - **Unit Tests**: Individual component testing
 - **Integration Tests**: Component interaction testing
 - **Visual Tests**: UI component visual testing
@@ -360,6 +382,7 @@ const MobileVerificationCard = ({ verification }) => (
 - **Performance Tests**: Frontend performance testing
 
 ### **Testing Configuration**
+
 ```typescript
 // Test setup
 import { render, screen } from '@testing-library/react';
@@ -385,6 +408,7 @@ describe('VerificationDisplay', () => {
 ## 📊 **Performance Optimization**
 
 ### **Code Splitting**
+
 ```typescript
 // Lazy loading for routes
 const VerificationPage = lazy(() => import('./pages/VerificationPage'));
@@ -404,6 +428,7 @@ const routes = [
 ```
 
 ### **Bundle Optimization**
+
 ```typescript
 // Vite configuration for optimization
 export default defineConfig({
@@ -424,12 +449,14 @@ export default defineConfig({
 ## 🔒 **Security & Privacy**
 
 ### **Data Protection**
+
 - **Input Validation**: Comprehensive input validation and sanitization
 - **XSS Prevention**: Cross-site scripting protection
 - **CSRF Protection**: Cross-site request forgery protection
 - **Data Encryption**: Client-side data encryption for sensitive information
 
 ### **Security Features**
+
 ```typescript
 // Security utilities
 const sanitizeInput = (input: string): string => {
@@ -448,6 +475,7 @@ const validateData = (data: unknown): boolean => {
 ## 🚀 **Deployment**
 
 ### **Build Process**
+
 ```bash
 # Development build
 npm run build:dev
@@ -460,6 +488,7 @@ npm run preview
 ```
 
 ### **Deployment Options**
+
 ```typescript
 // Deployment configuration
 const deploymentConfig = {
@@ -484,18 +513,21 @@ const deploymentConfig = {
 ## 🔮 **Future Enhancements**
 
 ### **Phase 1: Core Features (Current)**
+
 - ✅ Basic verification display
 - ✅ Responsive design
 - ✅ Real-time updates
 - ✅ Data visualization
 
 ### **Phase 2: Advanced Features (Next Quarter)**
+
 - 🔄 Advanced charting capabilities
 - 🔄 Export and sharing features
 - 🔄 Offline support
 - 🔄 Performance optimization
 
 ### **Phase 3: Enterprise Features (Future)**
+
 - 📋 Advanced analytics dashboard
 - 📋 Custom visualization builder
 - 📋 Multi-language support
@@ -504,12 +536,14 @@ const deploymentConfig = {
 ## 🤝 **Contributing**
 
 ### **Development Guidelines**
+
 - **Code Standards**: Follow established coding standards
 - **Component Design**: Create reusable, accessible components
 - **Testing**: Write comprehensive tests for all components
 - **Documentation**: Update documentation for UI changes
 
 ### **Development Workflow**
+
 1. **Fork**: Fork the repository
 2. **Branch**: Create feature branch
 3. **Develop**: Implement changes with tests
@@ -521,20 +555,22 @@ const deploymentConfig = {
 ## 📞 **Support & Contact**
 
 ### **Getting Help**
+
 - **Documentation**: Check comprehensive UI documentation
 - **Issues**: Report issues in the repository
 - **Team Support**: Contact frontend team for assistance
 - **Agent Support**: Use Viewer Agent for guidance
 
 ### **Team Contact**
-- **Frontend Team**: frontend@sealfold.org
-- **Technical Questions**: tech@sealfold.org
-- **General Inquiries**: info@sealfold.org
+
+- **Frontend Team**: <frontend@sealfold.org>
+- **Technical Questions**: <tech@sealfold.org>
+- **General Inquiries**: <info@sealfold.org>
 
 ---
 
 **Last Updated**: August 13, 2025  
 **Maintained By**: Sealfold Frontend Team  
-**Contact**: frontend@sealfold.org
+**Contact**: <frontend@sealfold.org>
 
 *The Prooflane Viewer repository provides the user-facing interface for the entire verification system. By delivering an intuitive, responsive, and accessible user experience, we ensure that users can effectively interact with and understand their verification data.* 🚀
